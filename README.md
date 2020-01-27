@@ -1,3 +1,3 @@
 #### ArduinoMakrotastatur
-Arduino Code für das Makrotastaturprojekt.
-[Weitere Infos](teichm-sh.de/makro)g
+Arduino bzw. Plattform IO Code für das Makrotastaturprojekt.
+[Weitere Infos](https://teichm-sh.de/makro)
