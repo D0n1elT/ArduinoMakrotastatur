@@ -1,7 +1,7 @@
 #define KEY_LEFT_CTRL   0x80 // DEC: 128
 #define KEY_LEFT_SHIFT  0x81 // DEC: 129
 #define KEY_LEFT_ALT    0x82 // DEC: 130
-#define KEY_LEFT_GUI    0x83 // DEC: 131 
+#define KEY_LEFT_GUI    0x83 // DEC: 131
 #define KEY_RIGHT_CTRL  0x84 // DEC: 132
 #define KEY_RIGHT_SHIFT 0x85 // DEC: 133
 #define KEY_RIGHT_ALT   0x86 // DEC: 134
@@ -103,17 +103,17 @@
 int selectedButton = 0;
 
 // The button which must be held down at boot for upload mode to begin.
-// Indexing begins at 0. 
+// Indexing begins at 0.
 #define uploadMode_bootbutton 0
 // The button which when pressed inside upload mode reboots the keyboard.
-// Indexing begins at 0. 
+// Indexing begins at 0.
 #define uploadMode_rebootbutton 5
 // Indicates if the upload mode is on.
 boolean uploadMode;
 
 // The EEPROM starting addresses for the commands of the buttons.
 unsigned int buttonROMAddr[] =   {11,  180, 349, 518, 687, 856};
-// The EEEPROM space determined for each button. 
+// The EEEPROM space determined for each button.
 unsigned int buttonROMLength[] = {168, 168, 168, 168, 168, 168};
 
 // str2int() can return following things
@@ -170,12 +170,12 @@ enum CMNDTYPES {
 };
 
 boolean initUploadMode();     // initializes the upload mode, in which we program the button actions.
-//void playNoSerialAnim();      // plays when no serial connection could be established at boot after 30 seconds.
+void playNoSerialAnim();      // plays when no serial connection could be established at boot after 30 seconds.
 void playIntroAnim();         // plays at boot.
 void calcUploadMode();        // constantly outputs EEPROM data on selected button.
 void(* resetFunc) (void) = 0; // declare reset function @ address 0.
 boolean checkMagicPackets();  // check if EEPROM was cleared.
-//void serialGetCommand();      // get and parse the inputs and process them into commands.
+void serialGetCommand();      // get and parse the inputs and process them into commands.
 boolean processButton (int btnID, boolean dryRun); // wrapper around execCommandsEEPROM().
 String getCmdTypeAsString (CMNDTYPES input); // just delivers commands as a String.
 CMNDTYPES getCmdType (String input); // gives you a CMNDTYPES enum for a String.
@@ -183,6 +183,8 @@ boolean execCommandsEEPROM(int startingAddr, int btnLength, boolean dryMode); //
 boolean storeCommandIntoEEPROM(CMNDTYPES CMND_ID, int adr, int len, char* buf, unsigned int *newOffset); // writes a command into EEPROM
 void printButtonEEPROMSpace(int selectedButton); // prints EEPROM for this button
 
+// Print debug messages?
+//#define DEBUG
 
 void setup() {
   // Helpful if we want to program the controller.
@@ -199,7 +201,7 @@ void setup() {
   // If button <uploadMode_bootbutton> is pressed -> go into upload mode. (for programing the buttons)
   if (!digitalRead(buttonPin[uploadMode_bootbutton])) {
     Serial.begin(115200);
-    //initUploadMode();
+    initUploadMode();
     return;
   } else {
     // Play the everything is normal animation.
@@ -228,7 +230,7 @@ void setup() {
 
   // We check if the EEPROM was written once.
   if (!checkMagicPackets()) {
-    //playNoSerialAnim();
+    playNoSerialAnim();
     return;
   }
 
@@ -243,7 +245,6 @@ void printUploadModeHeader(){
   logln(F("| Did you know, you can use a nice GUI to program too?       |"));
   logln(F("| More information on teichm-sh.de/makro                     |"));
   logln(F("--------------------------------------------------------------"));
-  logln();
   logln(F("--------------Technical information--------------"));
   log(F("Softwareversion: "));
   logln(SOFTWAREREVISION);
@@ -256,8 +257,8 @@ void printUploadModeHeader(){
 
 void printHelp(){
   logln(F("First you need to specify your desired button to program."));
-  log(F("To specify a button, execute following command: 'btnX'\nWhere X is the desired button\nAttention! 0 <= X < "));
-  logln(MAX_BUTTONS);
+  log(F("To specify a button you want to program, execute following command: 'btnX'\r\nWhere X is the desired button! Please note: 0 <= X <= "));
+  logln(MAX_BUTTONS - 1);
 
   logln(F("Then there are 7 commands you can use after specifing which button you want to program:"));
   logln(F("'btn<x>': explained above."));
@@ -265,16 +266,16 @@ void printHelp(){
   logln(F("'dly<0 <= x <= 65536>': delay further keyboard actions for x milliseconds."));
   logln(F("'mkp<x>': press (and hold) a keyboard modifier key."));
   logln(F("'mkr<x>': release a keyboard modifier key."));
-  logln(F("'RST': reboot/reset the keyboard."));
-  logln(F("'HELP': print this message."));
+  logln(F("'rst': reboot/reset the keyboard."));
+  logln(F("'help': print this message."));
 }
 
 /*
  *  initUploadMode() initializes the upload mode.
  *  and returns true if successfull.
  */
-/*boolean initUploadMode() {
-  logln("Initialising Uploadmode...");
+boolean initUploadMode() {
+  logln(F("Initialising Uploadmode..."));
 
   // Play the upload mode starting animation.
   for (int i = 0; i < MAX_BUTTONS * 12; i++) {
@@ -291,7 +292,7 @@ void printHelp(){
       // We didn't get a Serial connection.. So we play the no Serial animation.
       // And because we're in upload mode we CAN'T go further on.
       uploadMode = false;
-      //playNoSerialAnim();
+      playNoSerialAnim();
       digitalWrite(ledPin[5], LOW);
       return false;
     }
@@ -335,7 +336,7 @@ void printHelp(){
 
   // Return true because init. upload mode was successfull.
   return true;
-}*/
+}
 
 // Serial buffer size
 #define BUFLEN 170
@@ -433,11 +434,9 @@ boolean serialReceiveCommands() {
           return false;
         }
       } else if (gotBTN_ID && gotCMND_IDSTR) {
-        String msg;
-        int value;
         switch (serial_cmnd) {
           case CMND_STRING: {
-            msg = Serial.readStringUntil('\n');
+            String msg = Serial.readStringUntil('\n');
             log("Value: "); logln(msg);
 
             serial_cmnd_len = msg.length();
@@ -455,7 +454,7 @@ boolean serialReceiveCommands() {
           case CMND_DELAY:
           case CMND_MODKEYRELEASE:
           case CMND_MODKEYPRESS: {
-            value = Serial.parseInt();
+            int value = Serial.parseInt();
             itoa(value, buffer, 10);
             break;
           }
@@ -496,7 +495,7 @@ void loop() {
       // Reboot Keyboard
       resetFunc();
     }
-    //calcUploadMode();
+    calcUploadMode();
     return;
   } else if (Serial && Serial.available() > 0) {
     delay(250);
@@ -532,18 +531,18 @@ void loop() {
         EEPROM.write(i, 255);
         digitalWrite(ledPin[i%6], !digitalRead(ledPin[i%6]));
       }
-    }/* else if (msg.startsWith("UPLOADMODE")) {
-      //initUploadMode();
-    } */else if (msg.startsWith("RST")) {
+    } else if (msg.startsWith("UPLOADMODE")) {
+      initUploadMode();
+    } else if (msg.startsWith("RST")) {
       logln("Resetting...");
       delay(100);
       resetFunc();
     } else {
-      /*logln(F("You won't get far doing this. You need to be in uploadmode in order to program this keyboard manually."));
+      logln(F("You won't get far doing this. You need to be in uploadmode in order to program this keyboard manually."));
       log(F("To get into uploadmode, hold down button "));
       log(uploadMode_bootbutton + 1);
-      logln(F(" at boot or type 'uploadmode' now."));*/
-      logln(F("You won't get far doing this. Please consider downloading the programing software at teichm-sh.de/makro"));
+      logln(F(" at boot or type 'uploadmode' now."));
+      //logln(F("You won't get far doing this. Please consider downloading the programing software at teichm-sh.de/makro"));
     }
   }
 
@@ -557,7 +556,7 @@ void loop() {
         /*boolean successful = */
         processButton(i, false);
       } else {
-        //Button just released. Playing fade out anim.
+        // Button just released. Playing fade out anim.
         for (int r = 0; r < 90; r++) {
           digitalWrite(ledPin[i], HIGH);
           delayMicroseconds(1000 - r * 10);
@@ -582,7 +581,7 @@ void loop() {
   }
 }
 
-/*void playNoSerialAnim() {
+void playNoSerialAnim() {
   for (int i = MAX_BUTTONS - 1; i >= 0; i--) {
     for (int u = MAX_BUTTONS - 1; u >= 0; u--) {
       if (u != i) digitalWrite(ledPin[u], HIGH);
@@ -609,12 +608,11 @@ void loop() {
     delay(60);
     digitalWrite(ledPin[i], LOW);
   }
-}*/
+}
 
 void printHexDumpEEPROM(int innerBounds, int outerBounds) {
   #ifdef EEPROMREAD
-    logln(F("-------------------------------------------------------------------------------------------------"));
-      log(F("---------------------------------EEPROM-Content--"));
+    log(F("---------------------------------EEPROM-Content--"));
     log(innerBounds);
     log("-to-");
     log(outerBounds);
@@ -670,7 +668,7 @@ void printHexDumpEEPROM(int innerBounds, int outerBounds) {
         counter = 0;
       }
     }
-    logln();
+    logln(F("-------------------------------------------------------------------------------------------------"));
   #endif
 }
 
@@ -725,58 +723,60 @@ unsigned int newOffset = 0;
 void printButtonEEPROMSpace(int selectedButton){
   // Debug messages for the current button selected only
   int adr = buttonROMLength[selectedButton] + buttonROMAddr[selectedButton];
-  logln(F("--------------------------------------------------------------"));
 
-  //printHexDumpEEPROM(buttonROMAddr[selectedButton], adr - 1);
-
-  for (int i = buttonROMAddr[selectedButton]; i < adr; i++) {
-    /*// if button 2 is pressed then set the cmnd space with '255'
-    if ((!digitalRead(buttonPin[2]) || forceEEPROMReset)) {
-      // 'Reset' EEPROM
-      #ifdef EEPROMWRITE
-        EEPROM.put(i, 255); // '255'
+  #ifndef DEBUG
+    printHexDumpEEPROM(buttonROMAddr[selectedButton], adr - 1);
+  #else
+    logln(F("--------------------------------------------------------------"));
+    for (int i = buttonROMAddr[selectedButton]; i < adr; i++) {
+      /*// if button 2 is pressed then set the cmnd space with '255'
+      if ((!digitalRead(buttonPin[2]) || forceEEPROMReset)) {
+        // 'Reset' EEPROM
+        #ifdef EEPROMWRITE
+          EEPROM.put(i, 255); // '255'
+        #endif
+        delay(30);
+        if (millis() - tempTimer >= 90) {
+          tempTimer = millis();
+          digitalWrite(ledPin[2], !digitalRead(ledPin[2]));
+        }
+        newOffset = 0;
+        forceEEPROMReset = true;
+      }*/
+      log("EEPROM[");
+      log(i);
+      log("]:\t");
+      byte c;
+      #ifdef EEPROMREAD
+        c = EEPROM.read(i);
       #endif
-      delay(30);
-      if (millis() - tempTimer >= 90) {
-        tempTimer = millis();
-        digitalWrite(ledPin[2], !digitalRead(ledPin[2]));
+      if (c == 0) {
+        logln("NULL");
+      } else if (c == 255) {
+        logln("UNBESCHRIEBEN");
+      } else if (c >= 32 && c <= 126) {
+        logln(String((char)c));
+      } else {
+        log("[");
+        log(c);
+        logln("]");
       }
-      newOffset = 0;
-      forceEEPROMReset = true;
-    }*/
-    log("EEPROM[");
-    log(i);
-    log("]:\t");
-    byte c;
-    #ifdef EEPROMREAD
-      c = EEPROM.read(i);
-    #endif
-    if (c == 0) {
-      logln("NULL");
-    } else if (c == 255) {
-      logln("UNBESCHRIEBEN");
-    } else if (c >= 32 && c <= 126) {
-      logln(String((char)c));
-    } else {
-      log("[");
-      log(c);
-      logln("]");
     }
-  }
-  logln("----------------");
-  digitalWrite(ledPin[2], LOW);
+    logln("----------------");
+    digitalWrite(ledPin[2], LOW);
 
-  /*if (forceEEPROMReset) {
-    log("EEPROM WAS CLEARED FROM: '");
-    log(buttonROMAddr[selectedButton]);
-    log( "'\t-'");
-    log(adr-1);
-    logln("'");
-    forceEEPROMReset = false;
-  }*/
+    /*if (forceEEPROMReset) {
+      log("EEPROM WAS CLEARED FROM: '");
+      log(buttonROMAddr[selectedButton]);
+      log( "'\t-'");
+      log(adr-1);
+      logln("'");
+      forceEEPROMReset = false;
+    }*/
+  #endif
 }
 
-/*void calcUploadMode() {
+void calcUploadMode() {
   if (uploadMode) {
     uploadModeTimer = millis(); // LOL DEBUG TODO FIXME
     if (millis() - uploadModeTimer >= 5000) {
@@ -789,15 +789,14 @@ void printButtonEEPROMSpace(int selectedButton){
       if (buttonSelected) {
         printButtonEEPROMSpace(selectedButton);
       } else if (!helpPrinted) {
-        logln(F("First you need to specify your desired button to program."));
-        log(F("To specify a button, execute following command: 'btnX'\nWhere X is the desired button\nAttention! 0 <= X < "));
-        logln(MAX_BUTTONS);
+        printHelp();
+        logln("<debug> Help Printed...");
         helpPrinted = true;
       }
     }
 
     if (Serial) {
-      //serialGetCommand();
+      serialGetCommand();
     } else {
       // We lost connection!
       // We play an animation. 500 * 10 = 5000ms
@@ -811,7 +810,7 @@ void printButtonEEPROMSpace(int selectedButton){
       resetFunc();  //call reset
     }
   }
-}*/
+}
 
 #define MAGIC_PACKET_LOW  68
 #define MAGIC_PACKET_HIGH 84
@@ -881,7 +880,7 @@ boolean searchingViaByteCounter = false;
 CMNDTYPES cmndCurrentlyInvesting = CMND_NOCOMMAND;
 
 // Define to print debug messages when executing commands
-//#define EXEC_DEBUG
+#define EXEC_DEBUG
 
 // reads EEPROM, searches for commands and executes them.
 // or it can run in dryMode and return a list of commands
@@ -1115,7 +1114,7 @@ String getCmdTypeAsString (CMNDTYPES input) {
 }
 
 // Returns a CMNDTYPE for a String
-CMNDTYPES getCmdType (String input) {
+CMNDTYPES getCmdType (const String input) {
   if (input == "CMND_STRING") {
     return CMND_STRING;
   } else if (input == "CMND_DELAY") {
@@ -1147,10 +1146,13 @@ boolean isButtonValid() {
     figuringOutWhichButton = false;
     figuringOutWhichCommand = true;
     btnOffset = buttonROMAddr[selectedButton];
-    log("SELECTED BTN: ");
-    log(selectedButton);
-    log(" btnOffset: ");
-    logln(btnOffset);
+    log(F("You selected button: "));
+    logln(selectedButton);
+    #ifdef DEBUG
+      log("\twith a EEPROM offset of: ");
+      logln(btnOffset);
+    #endif
+    logln("Please specify a command now. Help: 'help'");
     newOffset = 0;
     thisCommandid = CMND_NOCOMMAND;
 
@@ -1170,8 +1172,7 @@ boolean isButtonValid() {
 
     return true;
   } else {
-    log("BUTTON SELECTION IS NOT VALID!: ");
-    logln(selectedButton);
+    logln(F("Youre button selection is not valid!\r\nHelp: 'help'"));
     selectedButton = -1;
     newOffset = 0;
     btnOffset = buttonROMAddr[0];
@@ -1183,9 +1184,12 @@ boolean isButtonValid() {
 }
 
 
-/*int len = 0;
+int len = 0;
 void serialGetCommand() {
   char buf[BUFLEN];
+
+  // A boolean for meassuring \n\r or \r or \n
+  boolean oldSerialState = false;
 
   while (Serial.available() > 0 || len > 0) {
     // If serial com program sends single characters instead of whole words.
@@ -1193,23 +1197,26 @@ void serialGetCommand() {
     while (len > 0 && Serial.available() <= 0) {
       delay(200);
       if (millis() - timer > 2000) {
-        logln("Buffer resets.");
+        logln(F("Serial buffer resets."));
         len = 0;
         return;
       }
     }
 
     char c = Serial.read();
-    if (c == '\r') break;
+
+    // When we get a "\r\n" with every new line...
+    if (oldSerialState && (c == '\n' || c == '\r')) {
+      break;
+    }
 
     if ((c == '\n') || (c == '\r')) {
+      oldSerialState = true;
       logln(); // Print 'missing' '\n'...
-      log("figureOutCommand: ");
-      log(figuringOutWhichCommand ? "true" : "false");
-      log(" figureOutButton: ");
-      logln(figuringOutWhichButton ? "true" : "false");
+
       if (figuringOutWhichButton) {
         if (figuringOutWhichCommand) {
+          logln(F("Something gone wrong!\r\nErrorcode: 101"));
           len = 0;
           figuringOutWhichButton = false;
           figuringOutWhichCommand = false;
@@ -1228,6 +1235,18 @@ void serialGetCommand() {
           // len = 0 && buffer cleared
           len = 0;
           return;
+        } else if (strncmp(buf, "help", 4) == 0) {
+          printHelp();
+          return;
+        } else {
+          // Print help because no valid input was given.
+          logln("No valid input! Please have a look at this:");
+          printHelp();
+          if (figuringOutWhichButton) {
+            logln(F("Waiting for you to specify a button. Help: 'help'"));
+          } else if (figuringOutWhichCommand) {
+            logln(F("Waiting for you to specify a command. Help: 'help'"));
+          }
         }
       } else if (figuringOutWhichCommand && len > 2) {
         thisCommandid = CMND_NOCOMMAND;
@@ -1256,24 +1275,35 @@ void serialGetCommand() {
         } else if (strncmp(buf, CMND_MODKEYRELEASE_SHORT, 3) == 0) {
           thisCommandid = CMND_MODKEYRELEASE;
           figuringOutWhichCommand = false;
-        } else if (strncmp(buf, "RST", 3) == 0) {
+        } else if (strncmp(buf, "rst", 3) == 0) {
           resetFunc();
-        } else if (strncmp(buf, "HELP", 4) == 0) {
+        } else if (strncmp(buf, "help", 4) == 0) {
           printHelp();
           break;
         } else {
-          logln("Not valid! Please have a look at this:");
-          logln();
+          logln("No valid input! Please have a look at this:");
           printHelp();
+          if (figuringOutWhichButton) {
+            logln(F("Waiting for you to specify a button. Help: 'help'"));
+          } else if (figuringOutWhichCommand) {
+            logln(F("Waiting for you to specify a command. Help: 'help'"));
+          }
           break;
         }
-        log("Selected Command: ");
-        logln(thisCommandid);
-        log("With length of: ");
-        logln(len);
+        log(F("You selected command: '"));
+        log(getCmdTypeAsString(thisCommandid));
+        log(F("' and the total command's length is: "));
+        logln(len + 1);
       } else {
         len = 0;
         figuringOutWhichCommand = true;
+        logln("No valid input! Please have a look at this:");
+        printHelp();
+        if (figuringOutWhichButton) {
+          logln(F("Waiting for you to specify a button. Help: 'help'"));
+        } else if (figuringOutWhichCommand) {
+          logln(F("Waiting for you to specify a command. Help: 'help'"));
+        }
         return;
       }
 
@@ -1291,15 +1321,17 @@ void serialGetCommand() {
         // Can't be saved to EEPROM if the user input ist larger than the free space.
         unsigned int adr = btnOffset + newOffset;
         if (adr + len >= 1024 || len + newOffset > buttonROMLength[selectedButton]) {
-          log("btnOffset:\t");
-          log(btnOffset);
-          log(" newOffset:\t");
-          log(newOffset);
-          log(" adr:\t");
-          log(adr);
-          log(" len:\t");
-          logln(len);
-          logln("Message wouldn't fit into EEPROM!");
+          #ifdef DEBUG
+            log("btnOffset: ");
+            log(btnOffset);
+            log("\tnewOffset: ");
+            log(newOffset);
+            log("\tadr: ");
+            log(adr);
+            log("\tlen: ");
+            logln(len);
+          #endif
+          logln(F("\tThis command wouldn't fit into EEPROM!"));
           break;
         }
 
@@ -1307,21 +1339,27 @@ void serialGetCommand() {
           printButtonEEPROMSpace(selectedButton);
         }
 
-        log("btnOffset:\t");
-        log(btnOffset);
-        log(" newOffset:\t");
-        log(newOffset);
-        log(" len:\t");
-        logln(len);
+        #ifdef DEBUG
+          log("btnOffset: ");
+          log(btnOffset);
+          log("\tnewOffset: ");
+          log(newOffset);
+          log("\tadr: ");
+          log(adr);
+          log("\tlen: ");
+          logln(len);
+        #endif
+
         len = 0;
         #ifdef EEPROMWRITE
           EEPROM.write(0, MAGIC_PACKET_LOW);
           EEPROM.write(1, MAGIC_PACKET_HIGH);
         #endif
         figuringOutWhichCommand = true;
-        //figuringOutWhichButton = true;
       }
     } else {
+      oldSerialState = false;
+
       // Backspace
       if (c == 0x08 && len > 0 ) {
         len--;
@@ -1330,13 +1368,16 @@ void serialGetCommand() {
       } else if (len < BUFLEN) {
         // Prevent buffer overflow
         buf[len] = c;
-        log(String(c));
+        if (c == '\r' || c == '\n'){
+          // Newline with carriage return.
+          log('\r'); log('\n');
+        } else log(String(c));
         len++;
         buf[len] = 0; // append null terminator
       }
     }
   }
-}*/
+}
 
 /*
  * storeCommandIntoEEPROM()
@@ -1467,11 +1508,11 @@ boolean storeCommandIntoEEPROM(CMNDTYPES CMND_ID, int adr, int len, char* buf, u
 // Prints the given returntype and returns true if successfull
 boolean str2int_printresult(STR2INT_RETURNTYPES result) {
   if (result != STR2INT_SUCCESS) {
-    log("CONVERTING INPUT FAILED! Errorcode:\t");
+    log("CONVERTING INPUT FAILED! Errorcode: ");
     if (result == STR2INT_INCONVERTIBLE) {
-      logln("INCONVERTIBLE");
+      logln("102 INCONVERTIBLE");
     } else {
-      logln("NUMBER TOO BIG OR TOO SMALL");
+      logln("103 NUMBER TOO BIG OR TOO SMALL");
     }
     return false;
   }
