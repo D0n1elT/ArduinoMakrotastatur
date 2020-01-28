@@ -396,58 +396,58 @@ boolean serialReceiveCommands() {
   // Wait for a command but not longer than 10.000ms for one.
   while (millis() - timer_serialGetCommands < 10000) {
     if (Serial.available() > 0) {
-      logln("Stuff received");
       // Reset timer
       timer_serialGetCommands = millis();
 
       // Parsing...
       if (!gotBTN_ID) {
         int oldButtonID = buttonID;
-        logln("buttonID parseInt()");
         buttonID = Serial.parseInt(SKIP_ALL, ';');
-        log(buttonID); logln(": btnid after parseInt()");
+        // TODO: USE isButtonValid() method
         if (buttonID >= 0 && buttonID <= MAX_BUTTONS) {
           gotBTN_ID = true;
           if (oldButtonID != buttonID) {
-            logln("Reset cmnd offset");
             serial_cmnd_offset = 0;
           }
         } else {
-          logln("ERROR!");
-          logln("BTN-ID is not valid!");
+          logln(F("ERROR!"));
+          logln(F("BTN-ID is invalid!"));
           return false;
         }
       } else if (!gotCMND_IDSTR) {
-        logln("cmnd_idstr readString...()");
         String cmnd_idstr;
         cmnd_idstr = Serial.readStringUntil(';');
-        if (cmnd_idstr.c_str()[0] != ';') {
-          
+        if (cmnd_idstr.c_str()[0] == ';') {
+          // Previous parseInt() won't remove it's ';' out of the stream.
+          cmnd_idstr = Serial.readStringUntil(';');
         }
-        log(cmnd_idstr); logln(": CMND_IDSTR readString...()");
         serial_cmnd = getCmdType(cmnd_idstr);
         if (serial_cmnd != CMND_NOCOMMAND) {
           gotCMND_IDSTR = true;
         } else {
-          logln("ERROR!");
-          logln("CMND-IDSTR ist ungültig!");
+          logln(F("ERROR!"));
+          logln(F("CMND-IDSTR is invalid!"));
           return false;
         }
       } else if (gotBTN_ID && gotCMND_IDSTR) {
         switch (serial_cmnd) {
           case CMND_STRING: {
             String msg = Serial.readStringUntil('\n');
-            log("Value: "); logln(msg);
+            #ifdef DEBUG
+              log("String value: "); logln(msg);
+            #endif
 
             serial_cmnd_len = msg.length();
             msg.toCharArray(buffer, BUFLEN);
             buffer[++serial_cmnd_len] = 0;
 
-            log("Length: "); logln(serial_cmnd_len);
-            for (unsigned int i = 0; i < serial_cmnd_len; i++) {
-              log("buffer["); log(i);
-              log("]: "); logln(buffer[i]);
-            }
+            #ifdef DEBUG
+              log("Length: "); logln(serial_cmnd_len);
+              for (unsigned int i = 0; i < serial_cmnd_len; i++) {
+                log("buffer["); log(i);
+                log("]: "); logln(buffer[i]);
+              }
+            #endif
 
             break;
           }
@@ -461,8 +461,8 @@ boolean serialReceiveCommands() {
           case CMND_NOCOMMAND:
           default: {
             logln(F("ERROR!"));
-            logln(F("Befehl wurde nicht erkannt!"));
-            logln(F("Bitte sende Befehl im Folgenden Format:"));
+            logln(F("Command was not recognized!"));
+            logln(F("Please send commands in the following format:"));
             logln(F("<BTN_ID>;<CMND_IDSTR>;<VALUE>"));
             return false;
           }
@@ -471,10 +471,14 @@ boolean serialReceiveCommands() {
         gotCMND_IDSTR = false;
         gotBTN_ID = false;
 
-        log(F("serialPutCommandsToEEPROM(")); log(buttonID); logln(")");
+        #ifdef DEBUG
+          log(F("serialPutCommandsToEEPROM(")); log(buttonID); logln(")");
+        #endif
 
         if (serialPutCommandsToEEPROM(buttonID)) {
-          logln("serialPutCommandsToEEPROM erfolgreich");
+          #ifdef DEBUG
+            logln("serialPutCommandsToEEPROM erfolgreich");
+          #endif
           gotSomething = true;
         } else {
           return false;
@@ -485,7 +489,6 @@ boolean serialReceiveCommands() {
       delay(20);
     }
   }
-  logln("Aus der While raus");
   return gotSomething;
 }
 
@@ -522,9 +525,13 @@ void loop() {
       log(CMND_MODKEYRELEASE_FULL); log(';'); log(getCmdTypeAsString(CMND_MODKEYRELEASE)); log(';'); log(CMND_MODKEYRELEASE_SHORT); log(';'); logln(CMND_MODKEYRELEASE);
     } else if (msg.startsWith("SETBUTTONS")) {
       if (serialReceiveCommands()) {
-        logln("Erfolgreicher Loop");
+        #ifdef DEBUG
+          logln("Successful serialReceiveCommands().");
+        #endif
       } else {
-        logln("Nicht erfolgreicher Loop.");
+        #ifdef DEBUG
+          logln("Unsuccessful serialReceiveCommands()!");
+        #endif
       }
     } else if (msg.startsWith("DELETEEEPROM")) {
       for (unsigned int i = 0; i < EEPROM.length(); i++){
@@ -1139,7 +1146,7 @@ CMNDTYPES thisCommandid = CMND_NOCOMMAND;
 
 /*
  * isButtonValid() checks if global selectedButton is valid
- * returns true if valid and false if non valid.
+ * returns true if valid and false if invalid.
  */
 boolean isButtonValid() {
   if (selectedButton >= 0 && selectedButton < MAX_BUTTONS) {
@@ -1172,7 +1179,7 @@ boolean isButtonValid() {
 
     return true;
   } else {
-    logln(F("Youre button selection is not valid!\r\nHelp: 'help'"));
+    logln(F("Youre button selection is invalid!\r\nHelp: 'help'"));
     selectedButton = -1;
     newOffset = 0;
     btnOffset = buttonROMAddr[0];
@@ -1281,7 +1288,7 @@ void serialGetCommand() {
           printHelp();
           break;
         } else {
-          logln("No valid input! Please have a look at this:");
+          logln("Invalid input! Please have a look at this:");
           printHelp();
           if (figuringOutWhichButton) {
             logln(F("Waiting for you to specify a button. Help: 'help'"));
@@ -1297,7 +1304,7 @@ void serialGetCommand() {
       } else {
         len = 0;
         figuringOutWhichCommand = true;
-        logln("No valid input! Please have a look at this:");
+        logln("Invalid input! Please have a look at this:");
         printHelp();
         if (figuringOutWhichButton) {
           logln(F("Waiting for you to specify a button. Help: 'help'"));
