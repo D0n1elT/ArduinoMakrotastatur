@@ -52,12 +52,14 @@
 //  - Improved holes and switch positions
 //  - Rotated Text 180° *Facepalm*
 
-#define SOFTWAREREVISION "1.0"
+#define SOFTWAREREVISION "v1.1"
 // Ver. "0.1" is the very first version.
 //  - The concept of hardware/software -versions isn't implemented.
 // Ver. "1.0"
 //  - Hardware/software-versions implemented.
 //  - Refactored a LOT of code.
+// Ver. "v1.1"
+//  - Reset EEPROM after every write...
 
 #define EEPROMREAD
 #define EEPROMWRITE
@@ -178,7 +180,7 @@ boolean checkMagicPackets();  // check if EEPROM was cleared.
 void serialGetCommand();      // get and parse the inputs and process them into commands.
 boolean processButton (int btnID, boolean dryRun); // wrapper around execCommandsEEPROM().
 String getCmdTypeAsString (CMNDTYPES input); // just delivers commands as a String.
-CMNDTYPES getCmdType (String input); // gives you a CMNDTYPES enum for a String.
+CMNDTYPES getCmdType (const String input); // gives you a CMNDTYPES enum for a String.
 boolean execCommandsEEPROM(int startingAddr, int btnLength, boolean dryMode); // reads EEPROM, searches for commands and executes them.
 boolean storeCommandIntoEEPROM(CMNDTYPES CMND_ID, int adr, int len, char* buf, unsigned int *newOffset); // writes a command into EEPROM
 void printButtonEEPROMSpace(int selectedButton); // prints EEPROM for this button
@@ -365,6 +367,18 @@ boolean serialPutCommandsToEEPROM(int buttonID){
   log(serial_cmnd); log(" "); log(adr); log(" "); log(serial_cmnd_len); log(" "); logln(serial_cmnd_offset);
   if (storeCommandIntoEEPROM(serial_cmnd, adr, serial_cmnd_len, buffer, &serial_cmnd_offset)) {
     logln(F("storeCommandIntoEEPROM() successful"));
+
+    log(F("Erasing EEPROM space after command: "));
+    log(adr+serial_cmnd_len);
+    log(F(" to "));
+    logln(buttonROMLength[buttonID]+buttonROMAddr[buttonID]-1);
+    for (unsigned int i = adr+serial_cmnd_len; i < buttonROMAddr[buttonID] + buttonROMLength[buttonID]; i++) {
+      // 'Reset' EEPROM
+      #ifdef EEPROMWRITE
+        EEPROM.put(i, 255); // '255'
+      #endif
+    }
+
     printButtonEEPROMSpace(buttonID);
   } else {
     logln(F("storeCommandIntoEEPROM() NOT successful"));
@@ -477,10 +491,13 @@ boolean serialReceiveCommands() {
 
         if (serialPutCommandsToEEPROM(buttonID)) {
           #ifdef DEBUG
-            logln("serialPutCommandsToEEPROM erfolgreich");
+            logln("Successful serialPutCommandsToEEPROM().");
           #endif
           gotSomething = true;
         } else {
+          #ifdef DEBUG
+            logln("Unsuccessful serialPutCommandsToEEPROM().");
+          #endif
           return false;
         }
       }
@@ -887,7 +904,7 @@ boolean searchingViaByteCounter = false;
 CMNDTYPES cmndCurrentlyInvesting = CMND_NOCOMMAND;
 
 // Define to print debug messages when executing commands
-#define EXEC_DEBUG
+//#define EXEC_DEBUG
 
 // reads EEPROM, searches for commands and executes them.
 // or it can run in dryMode and return a list of commands
@@ -896,7 +913,7 @@ boolean execCommandsEEPROM(int startingAddr, int btnLength, boolean dryMode) {
 
   byte buflen = 0;
   char characterBuffer[200];
-  int8_t byteCounter = -5;
+  int8_t byteCounter = -1;
 
   for (int i = startingAddr; i < startingAddr + btnLength; i++) {
     #ifdef EXEC_DEBUG
